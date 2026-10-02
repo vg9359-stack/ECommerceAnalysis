@@ -4,108 +4,110 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
-# Set visual style for charts
+# Set visual style
 sns.set_theme(style="whitegrid")
-plt.rcParams.update({'font.size': 10})
+plt.rcParams.update({"font.size": 11, "figure.autolayout": True})
 
-# =========================================================
-# Step 1: Data Acquisition & Loading
-# =========================================================
-basket_df = pd.read_csv(r"C:\Users\Viswa\Documents\ECommerceAnalysis\basket_details.csv")
-customer_df = pd.read_csv(r"C:\Users\Viswa\Documents\ECommerceAnalysis\customer_details.csv")
-print("--- Raw Basket Details Overview ---")
-print(basket_df.info())
+# ---------------------------------------------------------
+# 1. DATA LOADING & INITIAL INSPECTION
+# ---------------------------------------------------------
+print("--- 1. Loading Datasets ---")
+basket_df = pd.read_csv(r"C:\Users\Viswa\OneDrive\Documents\ECommerceAnalysis\basket_details.csv")
+customer_df = pd.read_csv(r"C:\Users\Viswa\OneDrive\Documents\ECommerceAnalysis\customer_details.csv")
 
-print("\n--- Raw Customer Details Overview ---")
-print(customer_df.info())
+print(f"Raw Basket Data Shape: {basket_df.shape}")
+print(f"Raw Customer Data Shape: {customer_df.shape}\n")
 
-# =========================================================
-# Step 2: Data Cleaning & Preprocessing
-# =========================================================
-# 1. Convert basket_date string object to datetime format
-basket_df['basket_date'] = pd.to_datetime(basket_df['basket_date'])
+# ---------------------------------------------------------
+# 2. DATA CLEANING & PREPROCESSING
+# ---------------------------------------------------------
+print("--- 2. Data Cleaning & Preprocessing ---")
 
-# 2. Handle invalid customer ages (negative values and outliers > 100)
-valid_age_median = customer_df.loc[
-    (customer_df['customer_age'] >= 18) & (customer_df['customer_age'] <= 100),
-    'customer_age',
+# Step 2.1: Deduplication
+basket_df = basket_df.drop_duplicates()
+customer_df = customer_df.drop_duplicates()
+
+# Step 2.2: Date Parsing & Temporal Feature Extraction
+basket_df["basket_date"] = pd.to_datetime(basket_df["basket_date"])
+basket_df["year_month"] = basket_df["basket_date"].dt.to_period("M")
+basket_df["day_of_week"] = basket_df["basket_date"].dt.day_name()
+
+# Step 2.3: Cleaning Customer Demographics
+# Filtering plausible age bounds (18 to 100) and imputing invalid/missing with median
+median_age = customer_df.loc[
+    (customer_df["customer_age"] >= 18) & (customer_df["customer_age"] <= 100),
+    "customer_age",
 ].median()
 
-customer_df_cleaned = customer_df.copy()
-customer_df_cleaned['customer_age_cleaned'] = customer_df_cleaned[
-    'customer_age'
-].apply(lambda age: age if 18 <= age <= 100 else valid_age_median)
-
-# 3. Deduplicate across datasets
-basket_df_cleaned = basket_df.drop_duplicates()
-customer_df_cleaned = customer_df_cleaned.drop_duplicates()
-
-# 4. Merge transaction and customer records on customer_id
-merged_df = pd.merge(
-    basket_df_cleaned, customer_df_cleaned, on='customer_id', how='inner'
+raw_age_series = customer_df["customer_age"].copy()
+customer_df["customer_age_cleaned"] = customer_df["customer_age"].apply(
+    lambda x: median_age if (pd.isna(x) or x < 18 or x > 100) else x
 )
 
-print("\n--- Merged Dataset Summary Statistics ---")
-print(merged_df[['basket_count', 'customer_age_cleaned', 'tenure']].describe())
+# Step 2.4: Merging Datasets
+df_merged = pd.merge(basket_df, customer_df, on="customer_id", how="inner")
+print(f"Cleaned Merged Data Shape: {df_merged.shape}\n")
 
-# =========================================================
-# Step 3: Exploratory Data Analysis & Visualizations
-# =========================================================
+# ---------------------------------------------------------
+# 3. VISUALIZATION GENERATION
+# ---------------------------------------------------------
+print("--- 3. Generating Visualizations ---")
 
-# --- Visualization 1: Customer Age Boxplot (Raw) vs. Histogram (Cleaned) ---
-fig, ax = plt.subplots(1, 2, figsize=(11, 4))
+# Visualization 1: Data Quality Check (Raw Age Outliers vs Cleaned Distribution)
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
-sns.boxplot(data=customer_df, y='customer_age', ax=ax[0], color='#ff7f0e')
-ax[0].set_title('Raw Customer Age (Outliers Present)')
-ax[0].set_ylabel('Age (Years)')
+sns.boxplot(y=raw_age_series, ax=axes[0], color="#e74c3c")
+axes[0].set_title("Raw Customer Age (With Outliers & Errors)")
+axes[0].set_ylabel("Customer Age")
 
 sns.histplot(
-    customer_df_cleaned['customer_age_cleaned'],
-    bins=25,
+    customer_df["customer_age_cleaned"],
+    bins=20,
     kde=True,
-    ax=ax[1],
-    color='#1f77b4',
+    ax=axes[1],
+    color="#2ecc71",
 )
-ax[1].set_title('Cleaned Customer Age Distribution')
-ax[1].set_xlabel('Age (Years)')
+axes[1].set_title("Cleaned Customer Age Distribution (Median Imputed)")
+axes[1].set_xlabel("Customer Age")
+axes[1].set_ylabel("Frequency")
 
-plt.tight_layout()
-plt.savefig(os.path.abspath('viz1_data_quality.png'), dpi=300)
+plt.suptitle("Visualization 1: Demographics Data Cleaning Impact", fontsize=14)
+plt.savefig("viz1_data_quality.png", dpi=300)
 plt.close()
 
-# --- Visualization 2: Correlation Matrix Heatmap ---
-plt.figure(figsize=(6, 4.5))
-corr_matrix = merged_df[
-    ['basket_count', 'customer_age_cleaned', 'tenure']
+# Visualization 2: Correlation Heatmap
+fig, ax = plt.subplots(figsize=(8, 6))
+corr_matrix = df_merged[
+    ["basket_count", "customer_age_cleaned", "tenure"]
 ].corr()
 
-sns.heatmap(corr_matrix, annot=True, cmap='Blues', fmt='.3f', vmin=-1, vmax=1)
-plt.title('Correlation Matrix (Basket Count, Age, Tenure)')
-plt.tight_layout()
-plt.savefig(os.path.abspath('viz2_correlation_heatmap.png'), dpi=300)
+sns.heatmap(
+    corr_matrix, annot=True, cmap="Blues", fmt=".3f", linewidths=1, ax=ax
+)
+ax.set_title(
+    "Visualization 2: Correlation Matrix (Basket Count, Age, Tenure)",
+    fontsize=12,
+)
+plt.savefig("viz2_correlation_heatmap.png", dpi=300)
 plt.close()
 
-# --- Visualization 3: Daily Total Basket Items Purchasing Trend (Line Graph) ---
-plt.figure(figsize=(9, 4))
+# Visualization 3: Daily Purchase Volume Trend
+fig, ax = plt.subplots(figsize=(12, 5))
 daily_trend = (
-    merged_df.groupby('basket_date')['basket_count'].sum().reset_index()
+    df_merged.groupby("basket_date")["basket_count"].sum().reset_index()
 )
 
-sns.lineplot(
-    data=daily_trend,
-    x='basket_date',
-    y='basket_count',
-    marker='o',
-    color='teal',
-    linewidth=2,
+ax.plot(
+    daily_trend["basket_date"],
+    daily_trend["basket_count"],
+    color="#3498db",
+    linewidth=1.5,
 )
-plt.title('Daily Total Basket Items Trend')
-plt.xlabel('Basket Date')
-plt.ylabel('Total Items Purchased')
+ax.set_title("Visualization 3: Total Daily Basket Volume Over Time", fontsize=12)
+ax.set_xlabel("Date")
+ax.set_ylabel("Total Items Purchased")
 plt.xticks(rotation=45)
-plt.tight_layout()
-plt.savefig(os.path.abspath('viz3_daily_trend.png'), dpi=300)
+plt.savefig("viz3_daily_trend.png", dpi=300)
 plt.close()
 
-print("\nExecution complete! All 3 figures generated and saved successfully.")
-
+print("All visualizations saved successfully as PNG files.")

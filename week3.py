@@ -8,8 +8,8 @@ import seaborn as sns
 # =========================================================
 # 1. LOAD & CLEAN DATASETS
 # =========================================================
-customers = pd.read_csv("customer_details.csv")
-baskets = pd.read_csv("basket_details.csv")
+customers = pd.read_csv(r"C:\Users\Viswa\OneDrive\Documents\ECommerceAnalysis\customer_details.csv")
+baskets = pd.read_csv(r"C:\Users\Viswa\OneDrive\Documents\ECommerceAnalysis\basket_details.csv")
 
 # Clean column headers (remove leading/trailing spaces and lowercase)
 customers.columns = customers.columns.str.strip().str.lower()
